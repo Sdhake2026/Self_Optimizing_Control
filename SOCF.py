@@ -3,7 +3,7 @@ import itertools
 import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
-from pyomo.environ import value
+from pyomo.environ import value, Objective
 
 def run_self_optimizing_model(build_model, disturbances, user_designs, metrics):
     """
@@ -66,10 +66,16 @@ def run_self_optimizing_model(build_model, disturbances, user_designs, metrics):
             J_nom = J_list[i]
             m = build_model()
             apply(m)                                  # impose design constraint
+            all_objs = m.component_data_objects(Objective)
+            obj = list(all_objs)[0]
+            is_min = obj.is_minimizing()
             for p,val in c.items(): getattr(m,p).set_value(val)
             try:
                 solver.solve(m, tee=False)
-                loss = round(J_nom - value(m.J), 2)
+                if is_min:
+                    loss = round(value(m.J) - J_nom, 2)
+                else:
+                    loss = round(J_nom - value(m.J), 2)
             except:
                 loss = np.nan
             loss_matrix.at[name,col] = loss
@@ -86,7 +92,7 @@ def run_self_optimizing_model(build_model, disturbances, user_designs, metrics):
     rank_vec = avg_loss.copy()
     max_ok   = rank_vec[~infeas].max()
     rank_vec[infeas] = max_ok + 1
-    rankings = rank_vec.rank(method='dense', ascending=True).astype(int)
+    rankings = rank_vec.rank(method='dense', ascending=True)
 
     loss_matrix.loc['Average loss'] = avg_loss.round(2)
     loss_matrix.loc['Ranking']      = rankings
